@@ -13,14 +13,14 @@ Fast and robust face tracking addon for openFrameworks based on [YOLO5Face](http
     - CUDA 11.4, TensorRT 8.0.3.4
 
 ## Installation
-- This addon depends on following addons. Please pull them to `addons` directory first.
+- This addon depends on following addons. Please pull them to `${OF_BASE_PATH}/addons` directory first.
     - [ofxCv](https://github.com/kylemcdonald/ofxCv)
     - [ofxOnnxRuntime](https://github.com/hanasaan/ofxOnnxRuntime)
 - Generate project using project generator, then `model` directory is copied into `bin/data`.
 
 ## Usage
 - In `model` directory, there are 2 converted pretrained models, which are `yolov5s-face_640x640.onnx` and `yolov5n-face0.5_320x320.onnx`.
-    - `yolov5s-face_640x640.onnx` is suitable for GPU detection, and `yolov5n-face0.5_320x320.onnx` is suitable for CPU detection.
+    - `yolov5s-face_640x640.onnx` is suitable for GPU detection, and `yolov5n-face0.5_320x320.onnx` is suitable for CPU detection with slightly accuracy degradation.
     - Original PyTorch pretrained models can be downloaded from [here](https://github.com/deepcam-cn/yolov5-face#pretrained-models).
     - Then onnx files are generated using [this script](https://github.com/deepcam-cn/yolov5-face/blob/d5d1ad2847142ff37a97a646516aad8655e156ff/export.py).
 - `ofxFaceTracker3::Tracker::setupCpu();` is handy setup method for CPU detection, which loads `yolov5n-face0.5_320x320.onnx` by default.
