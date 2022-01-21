@@ -6,6 +6,8 @@ void ofApp::setup(){
 	if (grabber.setup(1280, 720)) {
 
 		// Setup tracker
+		// uncomment this for threaded detecion (default false)
+		// tracker.setThreaded(true);
 #ifdef _MSC_VER
 		tracker.setupGpu(); // CUDA
 		//tracker.setupGpu("model/yolov5s-face_640x640.onnx", 0, true); // TensorRT

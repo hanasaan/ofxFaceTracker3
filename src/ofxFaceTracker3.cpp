@@ -115,10 +115,10 @@ namespace ofxFaceTracker3
 		}
 
 		if (b_threaded) {
-			to_process.send(&mat_rgb);
+			to_process.send(DetectionTask{ &mat_rgb, glm::vec2(roi.x, roi.y) });
 			updateThreadedResult();
 		} else {
-			detection_frame_result = runDetection(mat_rgb);
+			detection_frame_result = runDetection(mat_rgb, glm::vec2(roi.x, roi.y));
 		}
 		return true;
 	}
@@ -187,21 +187,21 @@ namespace ofxFaceTracker3
 	void Tracker::threadedFunction()
 	{
 		while (isThreadRunning()) {
-			cv::Mat* ptr;
-			while (to_process.tryReceive(ptr)) {
+			DetectionTask dt;
+			while (to_process.tryReceive(dt)) {
 				// process only latest frame
 				if (!to_process.empty()) {
 					continue;
 				}
 				thread_fps.newFrame();
-				auto ret = runDetection(*ptr);
+				auto ret = runDetection(*dt.ptr, dt.offset);
 				processed.send(ret);
 			}
 			ofSleepMillis(1);
 		}
 	}
 
-	DetectionFrame Tracker::runDetection(cv::Mat mat_rgb)
+	DetectionFrame Tracker::runDetection(cv::Mat mat_rgb, const glm::vec2& offset)
 	{
 		// perform resize & padding first.
 		double scale = 1.0;
@@ -293,10 +293,13 @@ namespace ofxFaceTracker3
 			for (auto& result : results_merged) {
 				result.bbox.x *= inv_scale;
 				result.bbox.y *= inv_scale;
+				result.bbox.x += offset.x;
+				result.bbox.y += offset.y;
 				result.bbox.width *= inv_scale;
 				result.bbox.height *= inv_scale;
 				for (auto& kp : result.keypoints) {
 					kp *= inv_scale;
+					kp += offset;
 				}
 			}
 

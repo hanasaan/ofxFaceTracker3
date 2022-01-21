@@ -64,9 +64,9 @@ namespace ofxFaceTracker3
 		const DetectionFrame& getDetectionFrameResult() const;
 	protected:
 		void threadedFunction() override;
-		DetectionFrame runDetection(cv::Mat mat_rgb);
+		DetectionFrame runDetection(cv::Mat mat_rgb, const glm::vec2& offset);
 
-		bool b_threaded = true;
+		bool b_threaded = false;
 		ofFpsCounter thread_fps;
 
 		/// YOLO5face params
@@ -88,7 +88,12 @@ namespace ofxFaceTracker3
 		ofxCv::Tracker<cv::Rect> face_tracker;
 
 		/// thread channel related
-		ofThreadChannel<cv::Mat*> to_process;
+		struct DetectionTask
+		{
+			cv::Mat* ptr;
+			glm::vec2 offset;
+		};
+		ofThreadChannel<DetectionTask> to_process;
 		ofThreadChannel<DetectionFrame> processed;
 	};
 }
