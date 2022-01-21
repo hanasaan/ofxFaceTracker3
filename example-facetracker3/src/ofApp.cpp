@@ -23,7 +23,9 @@ void ofApp::update(){
 	// Update tracker when there are new frames
 	if (grabber.isFrameNew()) {
 		tracker.update(grabber);
-	}
+    } else {
+        tracker.updateThreadedResult();
+    }
 }
 
 //--------------------------------------------------------------
@@ -37,4 +39,9 @@ void ofApp::draw(){
 	// Draw text UI
 	ofDrawBitmapStringHighlight("Framerate : " + ofToString(ofGetFrameRate()), 10, 40);
 	ofDrawBitmapStringHighlight("Tracker thread framerate : " + ofToString(tracker.getThreadFps()), 10, 60);
+    
+    ofPushMatrix();
+    ofTranslate(0, 60);
+    tracker.drawDebugInformation();
+    ofPopMatrix();
 }

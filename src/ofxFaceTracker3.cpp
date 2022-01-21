@@ -7,7 +7,7 @@ namespace ofxFaceTracker3
 {
 	using namespace ofxOnnxRuntime;
 
-#define ENABLE_TIME_PROFILE
+//#define ENABLE_TIME_PROFILE
 #ifdef ENABLE_TIME_PROFILE
 	class TimeProfiler
 	{
