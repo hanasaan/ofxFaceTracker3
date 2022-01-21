@@ -3,24 +3,17 @@
 //--------------------------------------------------------------
 void ofApp::setup(){
 	// Setup grabber
-	auto devices = grabber.listDevices();
-	for (auto device : devices) {
-		cerr << device.id << ": " << device.deviceName << ", available=" << device.bAvailable << ", formatsz=" << device.formats.size() << endl;
-		for (auto format : device.formats) {
-			cerr << "    " << format.width << "x" << format.height << ", fps=";
-			for (auto fps : format.framerates) {
-				cerr << fps << ", ";
-			}
-			cerr << endl;
-		}
-	}
+	if (grabber.setup(1280, 720)) {
 
-	grabber.setDeviceID(5);
-	if (grabber.setup(2560, 720)) {
+		// Setup tracker
+#ifdef _MSC_VER
+		tracker.setupGpu(); // CUDA
+		//tracker.setupGpu("model/yolov5s-face_640x640.onnx", 0, true); // TensorRT
+		//tracker.setupCpu(); // CPU
+#else
+		tracker.setupCpu();
+#endif
 	}
-
-	// Setup tracker
-	tracker.setupGpu();
 }
 
 //--------------------------------------------------------------

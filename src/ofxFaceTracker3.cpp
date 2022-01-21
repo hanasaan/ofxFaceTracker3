@@ -2,9 +2,33 @@
 
 #include "ofGraphics.h"
 
+
 namespace ofxFaceTracker3
 {
 	using namespace ofxOnnxRuntime;
+
+//#define ENABLE_TIME_PROFILE
+#ifdef ENABLE_TIME_PROFILE
+	class TinyScopedTimeProfiler
+	{
+		float ts, te;
+		std::string name;
+	public:
+		TinyScopedTimeProfiler(std::string name) {
+			ts = ofGetElapsedTimef();
+			this->name = name;
+		}
+
+		~TinyScopedTimeProfiler() {
+			te = ofGetElapsedTimef();
+			std::cerr << "[TimeProfile] " << name << ": "<< (te - ts) * 1000 << "ms" << std::endl;
+		}
+	};
+#define DEBUG_TIME_PROFILE(A) auto tp = TinyScopedTimeProfiler(A);
+#else
+#define DEBUG_TIME_PROFILE(A) 
+#endif
+
 
 	Tracker::Tracker()
 	{
@@ -52,6 +76,7 @@ namespace ofxFaceTracker3
 		// perform resize & padding first.
 		double scale = 1.0;
 		{
+			DEBUG_TIME_PROFILE("1-Preprocess");
 			scale = std::min<double>((double)input_node_dims[2] / mat_rgb.cols, (double)input_node_dims[3] / mat_rgb.rows);
 			cv::resize(mat_rgb, mat_rgb_resized, cv::Size(), scale, scale);
 			int pad_right = input_node_dims[2] - mat_rgb_resized.cols;
@@ -66,13 +91,15 @@ namespace ofxFaceTracker3
 		// run inference
 		float *output_ptr = nullptr;
 		{
+			DEBUG_TIME_PROFILE("2-Inference");
 			auto& output = BaseHandler::run();
 			output_ptr = output.GetTensorMutableData<float>();
 		}
 
-		// generate bbox
-		DetectionFrame results;
+		DetectionFrame results, results_merged;
 		{
+			// generate bbox
+			DEBUG_TIME_PROFILE("3-Postprocess");
 			auto output_dims = output_node_dims.at(0); // (1,n,16)
 			const unsigned int num_anchors = output_dims.at(1); // n = ?
 
@@ -105,11 +132,8 @@ namespace ofxFaceTracker3
 				if (count > max_face_count)
 					break;
 			}
-		}
 
-		// merge & rescale to original image size
-		DetectionFrame results_merged;
-		{
+			// merge & rescale to original image size
 			std::sort(results.begin(), results.end(), [](const DetectionResult &a, const DetectionResult &b) { return a.score > b.score; });
 			const unsigned int box_num = results.size();
 			std::vector<int> merged(box_num, 0);
