@@ -7,7 +7,7 @@ namespace ofxFaceTracker3
 {
 	using namespace ofxOnnxRuntime;
 
-//#define ENABLE_TIME_PROFILE
+#define ENABLE_TIME_PROFILE
 #ifdef ENABLE_TIME_PROFILE
 	class TimeProfiler
 	{
@@ -71,6 +71,9 @@ namespace ofxFaceTracker3
 
 	Tracker::~Tracker()
 	{
+		stop();
+		to_process.close();
+		processed.close();
 	}
 
 	void Tracker::setupCpu(const std::string& onnx_path)
@@ -94,6 +97,9 @@ namespace ofxFaceTracker3
 		if (image.empty()) return false;
 		cv::Mat mat = (roi.width != 0 && roi.height != 0) ? image(roi) : image;
 
+		auto& mat_rgb = mat_task_buffers[last_task_index];
+		last_task_index = (last_task_index + 1) % NUM_BUFFERS;
+
 		// if input image has 1, 4 channels, convert it to RGB.
 		if (mat.channels() == 1) {
 			cv::cvtColor(mat, mat_rgb, cv::COLOR_GRAY2RGB);
@@ -108,6 +114,95 @@ namespace ofxFaceTracker3
 			return false;
 		}
 
+		if (b_threaded) {
+			to_process.send(&mat_rgb);
+			updateThreadedResult();
+		} else {
+			detection_frame_result = runDetection(mat_rgb);
+		}
+		return true;
+	}
+
+	void Tracker::updateThreadedResult()
+	{
+		if (b_threaded) {
+			// get latest result
+			while (processed.tryReceive(detection_frame_result)) {}
+		}
+	}
+
+	void Tracker::drawDebug(float x, float y) const
+	{
+		ofPushMatrix();
+		ofTranslate(x, y);
+		for (const auto& result : detection_frame_result) {
+			ofPushStyle();
+			ofNoFill();
+			ofSetColor(255, 0, 0);
+			ofDrawRectangle(result.bbox);
+			ofSetColor(0, 255, 0);
+			ofFill();
+			for (const auto& kp : result.keypoints) {
+				ofDrawCircle(kp, 3);
+			}
+			ofPopStyle();
+			ofDrawBitmapString(ofVAArgsToString("%d, %.3f", result.tracking_label, result.score), result.bbox.x, result.bbox.y);
+		}
+		ofPopMatrix();
+	}
+
+	void Tracker::drawDebugInformation() const
+	{
+		ofDrawBitmapStringHighlight(ofVAArgsToString("Detected Face Count : %d", detection_frame_result.size()), 10, 20);
+#ifdef ENABLE_TIME_PROFILE
+		ofDrawBitmapStringHighlight(tp_->getDebugString(), 10, 40);
+#endif
+	}
+
+	void Tracker::stop()
+	{
+		waitForThread();
+	}
+
+	size_t Tracker::size() const
+	{
+		return detection_frame_result.size();
+	}
+
+	float Tracker::getThreadFps() const
+	{
+		return thread_fps.getFps();
+	}
+
+	void Tracker::setThreaded(bool threaded)
+	{
+		b_threaded = threaded;
+	}
+
+	const DetectionFrame & Tracker::getDetectionFrameResult() const
+	{
+		return detection_frame_result;
+	}
+
+	void Tracker::threadedFunction()
+	{
+		while (isThreadRunning()) {
+			cv::Mat* ptr;
+			while (to_process.tryReceive(ptr)) {
+				// process only latest frame
+				if (!to_process.empty()) {
+					continue;
+				}
+				thread_fps.newFrame();
+				auto ret = runDetection(*ptr);
+				processed.send(ret);
+			}
+			ofSleepMillis(1);
+		}
+	}
+
+	DetectionFrame Tracker::runDetection(cv::Mat mat_rgb)
+	{
 		// perform resize & padding first.
 		double scale = 1.0;
 		{
@@ -119,8 +214,15 @@ namespace ofxFaceTracker3
 			cv::copyMakeBorder(mat_rgb_resized, mat_rgb_padded, 0, pad_bottom, 0, pad_right, cv::BORDER_CONSTANT);
 
 			// create blob image & copy to tensor buffer
-			mat_blob = cv::dnn::blobFromImage(mat_rgb_padded, 1.0 / 255.0, cv::Size(input_node_dims[2], input_node_dims[3]), cv::Scalar(), false, true);
-			std::memcpy(input_values_handler.data(), mat_blob.data, input_tensor_size * sizeof(float));
+			// cv::dnn::blobFromImage is slow like 6msec. 
+			// this conversion is like 1msec.
+			mat_rgb_padded.convertTo(mat_rgb_padded_f, CV_32F, 1.0 / 255.0);
+			cv::Mat ch[3];
+			int sz = mat_rgb_padded_f.rows * mat_rgb_padded_f.cols;
+			for (int i = 0; i < 3; ++i) {
+				ch[i] = cv::Mat(mat_rgb_padded_f.rows, mat_rgb_padded_f.cols, CV_32F, &input_values_handler[sz * i]);
+			}
+			cv::split(mat_rgb_padded_f, ch);
 		}
 
 		// run inference
@@ -197,71 +299,17 @@ namespace ofxFaceTracker3
 					kp *= inv_scale;
 				}
 			}
-		}
 
-		detection_frame_result = results_merged;
-
-		return true;
-	}
-
-	void Tracker::drawDebug(float x, float y) const
-	{
-		ofPushMatrix();
-		ofTranslate(x, y);
-		for (const auto& result : detection_frame_result) {
-			ofPushStyle();
-			ofNoFill();
-			ofSetColor(255, 0, 0);
-			ofDrawRectangle(result.bbox);
-			ofSetColor(0, 255, 0);
-			ofFill();
-			for (const auto& kp : result.keypoints) {
-				ofDrawCircle(kp, 3);
+			// get tracking label
+			std::vector<cv::Rect> rects;
+			for (auto& r : results_merged) {
+				rects.emplace_back(ofxCv::toCv(r.bbox));
 			}
-			ofPopStyle();
-			ofDrawBitmapString(ofVAArgsToString("Score : %.3f", result.score), result.bbox.x, result.bbox.y);
+			face_tracker.track(rects);
+			for (int i = 0; i < results_merged.size(); ++i) {
+				results_merged[i].tracking_label = face_tracker.getLabelFromIndex(i);
+			}
 		}
-		ofPopMatrix();
-	}
-
-	void Tracker::drawDebugInformation() const
-	{
-		ofDrawBitmapStringHighlight(ofVAArgsToString("Detected Face Count : %d", detection_frame_result.size()), 10, 20);
-#ifdef ENABLE_TIME_PROFILE
-		ofDrawBitmapStringHighlight(tp_->getDebugString(), 10, 40);
-#endif
-	}
-
-	void Tracker::stop()
-	{
-		waitForThread();
-	}
-
-	size_t Tracker::size() const
-	{
-		return detection_frame_result.size();
-	}
-
-	float Tracker::getThreadFps() const
-	{
-		return thread_fps.getFps();
-	}
-
-	void Tracker::setThreaded(bool threaded)
-	{
-		b_threaded = threaded;
-	}
-
-	const DetectionFrame & Tracker::getDetectionFrameResult() const
-	{
-		return detection_frame_result;
-	}
-
-	void Tracker::threadedFunction()
-	{
-		while (isThreadRunning()) {
-
-			ofSleepMillis(1);
-		}
+		return results_merged;
 	}
 }

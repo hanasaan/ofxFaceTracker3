@@ -7,12 +7,14 @@
 namespace ofxFaceTracker3
 {
 	static constexpr size_t NUM_KEYPOINTS = 5;
+	static constexpr size_t NUM_BUFFERS = 4;
 
 	struct DetectionResult
 	{
 		ofRectangle bbox;
 		std::array<glm::vec2, NUM_KEYPOINTS> keypoints;
 		float score;
+		unsigned int tracking_label;
 	};
 
 	using DetectionFrame = std::vector<DetectionResult>;
@@ -39,6 +41,7 @@ namespace ofxFaceTracker3
 		bool update(T& image, cv::Rect roi = cv::Rect(0, 0, 0, 0)) {
 			return update(ofxCv::toCv(image), roi);
 		}
+		void updateThreadedResult();
 
 		/// Draw a debug drawing of the detected face
 		void drawDebug(float x = 0, float y = 0) const;
@@ -54,14 +57,16 @@ namespace ofxFaceTracker3
 		/// Returns the fps the background tracker thread is running with
 		float getThreadFps()const;
 
-		/// Set weather the tracker should run threaded or not
+		/// Set weather the tracker should run threaded or not. Must be called before calling setup().
 		void setThreaded(bool threaded);
+		bool isThreaded() const { return b_threaded; }
 
 		const DetectionFrame& getDetectionFrameResult() const;
 	protected:
 		void threadedFunction() override;
+		DetectionFrame runDetection(cv::Mat mat_rgb);
 
-		bool b_threaded = false;
+		bool b_threaded = true;
 		ofFpsCounter thread_fps;
 
 		/// YOLO5face params
@@ -70,13 +75,21 @@ namespace ofxFaceTracker3
 		size_t max_face_count = 400;
 
 		/// all intermediate cv::Mat buffers, to avoid memory allocation
-		cv::Mat mat_rgb;
+		int last_task_index = 0;
+		std::array<cv::Mat, NUM_BUFFERS> mat_task_buffers;
 		cv::Mat mat_rgb_resized;
 		cv::Mat mat_rgb_padded;
-		cv::Mat mat_blob;
+		cv::Mat mat_rgb_padded_f;
 
-		// result buffer
+		/// result buffer
 		DetectionFrame detection_frame_result;
+
+		/// tracker
+		ofxCv::Tracker<cv::Rect> face_tracker;
+
+		/// thread channel related
+		ofThreadChannel<cv::Mat*> to_process;
+		ofThreadChannel<DetectionFrame> processed;
 	};
 }
 

@@ -37,6 +37,3 @@ Fast and robust face tracking addon for openFrameworks based on [YOLO5Face](http
 
 ## Reference
 - I heavily referred [Lite.AI.ToolKit](https://github.com/DefTruth/lite.ai.toolkit) implementation.
-
-## ToDo
-- Threading, Tracking.
