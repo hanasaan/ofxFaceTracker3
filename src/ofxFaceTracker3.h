@@ -43,6 +43,8 @@ namespace ofxFaceTracker3
 		/// Draw a debug drawing of the detected face
 		void drawDebug(float x = 0, float y = 0) const;
 
+		void drawDebugInformation() const;
+
 		/// Stop the background tracker thread (called automatically on app exit)
 		void stop();
 

@@ -9,22 +9,54 @@ namespace ofxFaceTracker3
 
 //#define ENABLE_TIME_PROFILE
 #ifdef ENABLE_TIME_PROFILE
+	class TimeProfiler
+	{
+		std::mutex mtx;
+		std::map<std::string, float> tmap;
+	public:
+		TimeProfiler() {}
+		~TimeProfiler() {}
+
+		void addTime(std::string key, float t)
+		{
+			std::lock_guard<std::mutex> lock(mtx);
+			tmap[key] = t;
+		}
+
+		std::string getDebugString()
+		{
+			std::stringstream ss;
+			ss << "Profiled Time Info" << std::endl;
+			ss << std::fixed << std::setprecision(3);
+			{
+				std::lock_guard<std::mutex> lock(mtx);
+				for (auto& m : tmap) {
+					ss << m.first << " : " << m.second * 1000.0 << "msec" << std::endl;
+				}
+			}
+			return ss.str();
+		}
+	};
+	static std::shared_ptr<TimeProfiler> tp_;
+
 	class TinyScopedTimeProfiler
 	{
+		TimeProfiler* ptr = nullptr;
 		float ts, te;
 		std::string name;
 	public:
-		TinyScopedTimeProfiler(std::string name) {
+		TinyScopedTimeProfiler(std::string name, TimeProfiler* p) {
 			ts = ofGetElapsedTimef();
 			this->name = name;
+			this->ptr = p;
 		}
 
 		~TinyScopedTimeProfiler() {
 			te = ofGetElapsedTimef();
-			std::cerr << "[TimeProfile] " << name << ": "<< (te - ts) * 1000 << "ms" << std::endl;
+			ptr->addTime(name, (te - ts));
 		}
 	};
-#define DEBUG_TIME_PROFILE(A) auto tp = TinyScopedTimeProfiler(A);
+#define DEBUG_TIME_PROFILE(A) auto tp = TinyScopedTimeProfiler(A, tp_.get());
 #else
 #define DEBUG_TIME_PROFILE(A) 
 #endif
@@ -32,6 +64,9 @@ namespace ofxFaceTracker3
 
 	Tracker::Tracker()
 	{
+#ifdef ENABLE_TIME_PROFILE
+		tp_ = std::make_shared<TimeProfiler>();
+#endif
 	}
 
 	Tracker::~Tracker()
@@ -187,7 +222,24 @@ namespace ofxFaceTracker3
 			ofDrawBitmapString(ofVAArgsToString("Score : %.3f", result.score), result.bbox.x, result.bbox.y);
 		}
 		ofPopMatrix();
-		ofDrawBitmapStringHighlight(ofVAArgsToString("Detected Face Count : %d", detection_frame_result.size()), x + 10, y + 20);
+	}
+
+	void Tracker::drawDebugInformation() const
+	{
+		ofDrawBitmapStringHighlight(ofVAArgsToString("Detected Face Count : %d", detection_frame_result.size()), 10, 20);
+#ifdef ENABLE_TIME_PROFILE
+		ofDrawBitmapStringHighlight(tp_->getDebugString(), 10, 40);
+#endif
+	}
+
+	void Tracker::stop()
+	{
+		waitForThread();
+	}
+
+	size_t Tracker::size() const
+	{
+		return detection_frame_result.size();
 	}
 
 	float Tracker::getThreadFps() const
