@@ -105,7 +105,7 @@ namespace ofxFaceTracker3
 			cv::cvtColor(mat, mat_rgb, cv::COLOR_GRAY2RGB);
 		}
 		else if (mat.channels() == 3) {
-			mat_rgb = mat.clone();
+			mat_rgb = b_threaded ? mat.clone() : mat;
 		}
 		else if (mat.channels() == 4) {
 			cv::cvtColor(mat, mat_rgb, cv::COLOR_RGBA2RGB);
