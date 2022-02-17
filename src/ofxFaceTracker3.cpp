@@ -138,7 +138,12 @@ namespace ofxFaceTracker3
 		for (const auto& result : detection_frame_result) {
 			ofPushStyle();
 			ofNoFill();
-			ofSetColor(255, 0, 0);
+			if (result.is_tracked) {
+				ofSetColor(255, 0, 0);
+			}
+			else {
+				ofSetColor(0, 0, 255);
+			}
 			ofDrawRectangle(result.bbox);
 			ofSetColor(0, 255, 0);
 			ofFill();
@@ -182,6 +187,16 @@ namespace ofxFaceTracker3
 	const DetectionFrame & Tracker::getDetectionFrameResult() const
 	{
 		return detection_frame_result;
+	}
+
+	const ofxCv::Tracker<cv::Rect>& Tracker::getTracker() const
+	{
+		return face_tracker;
+	}
+
+	ofxCv::Tracker<cv::Rect>& Tracker::getTracker()
+	{
+		return face_tracker;
 	}
 
 	void Tracker::threadedFunction()
@@ -308,9 +323,33 @@ namespace ofxFaceTracker3
 			for (auto& r : results_merged) {
 				rects.emplace_back(ofxCv::toCv(r.bbox));
 			}
-			face_tracker.track(rects);
+			const auto current_labels = face_tracker.track(rects);
+			std::vector<unsigned int> current_labels_detected;
+			auto dead_labels = face_tracker.getDeadLabels();
 			for (int i = 0; i < results_merged.size(); ++i) {
-				results_merged[i].tracking_label = face_tracker.getLabelFromIndex(i);
+				auto label = face_tracker.getLabelFromIndex(i);
+				results_merged[i].tracking_label = label;
+				results_merged[i].is_tracked = true;
+				detection_result_buffer[label] = results_merged[i];
+				current_labels_detected.emplace_back(label);
+			}
+
+			// copy lost faces
+			for (const auto& d : detection_result_buffer) {
+				if (ofContains(dead_labels, d.first) && !ofContains(current_labels_detected, d.first)) {
+					results_merged.emplace_back(d.second);
+					results_merged.back().is_tracked = false;
+				}
+			}
+
+			// delete unused buffers
+			for (auto it = detection_result_buffer.cbegin(); it != detection_result_buffer.cend();) {
+				if (!ofContains(dead_labels, it->first) && !ofContains(current_labels, it->first)) {
+					it = detection_result_buffer.erase(it);
+				}
+				else {
+					++it;
+				}
 			}
 		}
 		return results_merged;

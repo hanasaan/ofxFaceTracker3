@@ -4,6 +4,8 @@
 #include "ofxCv.h"
 #include "ofxOnnxRuntime.h"
 
+#include <unordered_map>
+
 namespace ofxFaceTracker3
 {
 	static constexpr size_t NUM_KEYPOINTS = 5;
@@ -15,6 +17,7 @@ namespace ofxFaceTracker3
 		std::array<glm::vec2, NUM_KEYPOINTS> keypoints;
 		float score;
 		unsigned int tracking_label;
+		bool is_tracked;
 	};
 
 	using DetectionFrame = std::vector<DetectionResult>;
@@ -62,6 +65,8 @@ namespace ofxFaceTracker3
 		bool isThreaded() const { return b_threaded; }
 
 		const DetectionFrame& getDetectionFrameResult() const;
+		const ofxCv::Tracker<cv::Rect>& getTracker() const;
+		ofxCv::Tracker<cv::Rect>& getTracker();
 	protected:
 		void threadedFunction() override;
 		DetectionFrame runDetection(cv::Mat mat_rgb, const glm::vec2& offset);
@@ -83,6 +88,7 @@ namespace ofxFaceTracker3
 
 		/// result buffer
 		DetectionFrame detection_frame_result;
+		std::unordered_map<unsigned int, DetectionResult> detection_result_buffer;
 
 		/// tracker
 		ofxCv::Tracker<cv::Rect> face_tracker;
